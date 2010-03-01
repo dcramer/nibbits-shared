@@ -15,7 +15,7 @@ You can also test w/ this file directly:
 
 """
 
-from sc2.parsers import BitParser
+from sc2.parsers import *
 
 class Client(BitParser):
     structs = (
