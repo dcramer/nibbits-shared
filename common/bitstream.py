@@ -143,7 +143,7 @@ class BitStream(object):
             self.writebits(ord(c), 8)
 
     def read(self, i):
-        self.alignright()
+        self.align()
         ret = []
         for i in range(i):
             ret.append(chr(self.readbits(8)))
