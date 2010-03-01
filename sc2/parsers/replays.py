@@ -1,7 +1,7 @@
 """
 Parses out SC2Replay files.
 
->>> from sc2.parsers.replays import ReplayInfo
+>>> from common.parsers.replays import ReplayInfo
 >>> from common.bitstream import BitStream
 >>> 
 >>> fp = BitStream(open('Path.SC2Replay', 'rb'))
@@ -15,7 +15,10 @@ You can also test w/ this file directly:
 
 """
 
-from sc2.parsers import *
+import mpq
+
+from common.bitstream import BitStream
+from common.bitparser import *
 
 class Client(BitParser):
     structs = (
@@ -131,10 +134,18 @@ class ReplayInfo(BitParser):
         ('Players', List(Player), 5),
     )
 
+class SC2Replay(object):
+    def __init__(self, filepath):
+        self.mpq = mpq.Archive(str(filepath))
+
+    @property
+    def info(self):
+        parser = ReplayInfo()
+        value = parser.serialize(BitStream(str(self.mpq['replay.info'])))
+        setattr(self, 'info', value)
+        return value
+
 if __name__ == '__main__':
-    from common.bitstream import BitStream
-    
-    fp = BitStream(open(' '.join(sys.argv[2:]), 'rb'))
-    parser = ReplayInfo()
-    data = parser.serialize(fp)
+    parser = SC2Replay(' '.join(sys.argv[2:]))
+    data = parser.info
     print "Map filename: ", data.GameInfo.MapInfo.CachePath
