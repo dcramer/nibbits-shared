@@ -55,12 +55,6 @@ class List(BitParser):
             values.append(self.type().serialize(fp))
         return values
 
-class Nullable(BitParser):
-    def serialize(self, fp, length, **kwargs):
-        present = fp.readbits(1)
-        if present:
-            return fp.readbits(length)
-
 class Boolean(BitParser):
     def serialize(self, fp, **kwargs):
         return bool(fp.readbits(1))
@@ -68,6 +62,15 @@ class Boolean(BitParser):
 class Byte(BitParser):
     def serialize(self, fp, length, **kwargs):
         return fp.readbits(length)
+
+class Nullable(Parser):
+    def __init__(self, type=Byte):
+        self.type = type
+        
+    def serialize(self, fp, length, **kwargs):
+        present = fp.readbits(1)
+        if present:
+            return self.type().serialize(fp, length)
 
 class Enum(BitParser):
     choices = []
