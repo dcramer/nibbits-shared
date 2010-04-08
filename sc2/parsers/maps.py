@@ -1,81 +1,131 @@
+from common.parser.base import Parser
+
+from cStringIO import StringIO
+
 import mpq
+import struct
 
-class AttrDict(object):
-    # TODO: replace this with something better
-    def __init__(self, **kwargs):
-        for k, v in kwargs.iteritems():
-            setattr(self, k, v)
-
-class StringParser(object):
-    """Parses out strings in the form of key=value"""
-    def serialize(fp):
-        strings = {}
-        for l in data:
-            l = l.split('=', 1)
-            strings[l[0]] = l[1].strip('\r\n')
-    
-        return strings
-
-class Localization(object):
-    def __init__(self, parser, lang):
-        self.parser = parser
-        self.lang = lang
-    
-    @property
-    def GameStrings(self):
-        parser = StringParser()
-        value = parser.serialize(self.parser.mpq['%s.SC2Data\LocalizedData\GameStrings.txt' % (self.lang,)])
-        setattr(self, 'GameStrings', value)
+class String(Parser):
+    def serialize(self, fp, **kwargs):
+        value = ''
+        r = fp.read(1)
+        while r != '\x00':
+            value += r
+            r = fp.read(1)
         return value
 
-    @property
-    def TriggerStrings(self):
-        parser = StringParser()
-        value = parser.serialize(self.parser.mpq['%s.SC2Data\LocalizedData\TriggerStrings.txt' % (self.lang,)])
-        setattr(self, 'TriggerStrings', value)
+class UInt8(Parser):
+    def serialize(self, fp, min_value=None, max_value=None, **kwargs):
+        value = ord(struct.unpack('c', fp.read(1))[0])
+        if min_value:
+            assert value >= min_value, "exceeded min value of %s (was %s)" % (min_value, value)
+        if max_value:
+            assert value <= max_value, "exceeded max value of %s (was %s)" % (max_value, value)
         return value
 
-class S2MA(object):
-    LANGUAGES = ('enUS',)
+class UInt16(Parser):
+    def serialize(self, fp, min_value=None, max_value=None, **kwargs):
+        value = struct.unpack('h', fp.read(2))[0]
+        if min_value:
+            assert value >= min_value, "exceeded min value of %s (was %s)" % (min_value, value)
+        if max_value:
+            assert value <= max_value, "exceeded max value of %s (was %s)" % (max_value, value)
+        return value
 
-    def __init__(self, filename):
-        self.mpq = mpq.Archive(str(filename))
-        for lang in self.langs:
-            setattr(self, lang, Localization(self, lang))
-    
-    @property
-    def Attributes(self):
-        values = AttrDict(Variants=[])
-        root = objectify.fromstring(str(self.mpq['Attributes']))
-        for variant in root.iterchildren('Variant'):
-            try:
-                IsDefault = variant.IsDefault and True
-            except AttributeError:
-                IsDefault = False
-            this = {
-                'Id': int(variant.Id.get('Value')),
-                'Genre': int(variant.Genre.get('Value')),
-                'GameType': int(variant.GameType.get('Value')),
-                'MaxTeamSize': int(variant.MaxTeamSize.get('Value')),
-                'Name': self.gamestrings[variant.Name.get('Value')],
-                'Description': self.gamestrings[variant.Description.get('Value')],
-                'IsDefault': IsDefault,
-            }
-            for attr in variant.iterchildren('Attribute'):
-                if attr.get('Id') == '3007':
-                    # this is our players info
-                    this['MaxPlayers'] = len([a for a in attr.Default if a.Value.get('Id') == '1348563572'])
-            values.Variants.append(AttrDict(**this))
-        setattr(self, 'Attributes', values)
+class UInt32(Parser):
+    def serialize(self, fp, min_value=None, max_value=None, **kwargs):
+        value = struct.unpack('i', fp.read(4))[0]
+        if min_value:
+            assert value >= min_value, "exceeded min value of %s (was %s)" % (min_value, value)
+        if max_value:
+            assert value <= max_value, "exceeded max value of %s (was %s)" % (max_value, value)
+        return value
+
+class Byte(Parser):
+    def serialize(self, fp, length, min_value=None, max_value=None, **kwargs):
+        value = fp.read(length)
+        if min_value:
+            assert value >= min_value, "exceeded min value of %s (was %s)" % (min_value, value)
+        if max_value:
+            assert value <= max_value, "exceeded max value of %s (was %s)" % (max_value, value)
+        return value
+
+class List(Parser):
+    def __init__(self, type, length_type):
+        self.type = type
+        self.length_type = length_type
+
+    def serialize(self, fp, min_value=None, max_value=None, **kwargs):
+        value = self.length_type().serialize(fp, **kwargs)
+        if min_value:
+            assert value >= min_value, "exceeded min value of %s (was %s)" % (min_value, value)
+        if max_value:
+            assert value <= max_value, "exceeded max value of %s (was %s)" % (max_value, value)
+        values = []
+        for n in range(value):
+            values.append(self.type().serialize(fp))
         return values
 
+class Player(Parser):
+    structs = (
+        ('IsUnused', UInt8),
+        ('PUnk1', UInt8),
+        ('PUnk2', UInt8),
+        ('Index', UInt8),
+        ('Owner', UInt8),
+        ('PUnk3', UInt8),
+        ('PUnk4', UInt8),
+        ('PUnk5', UInt8),
+        ('Color', UInt32),
+        ('Race', String),
+        ('Index', UInt8),
+        ('PUnk6', UInt8),
+        ('PUnk7', UInt8),
+        ('PUnk1', UInt8),
+        ('PUnk9', UInt8),
+        ('PUnk10', UInt8),
+        ('PUnk11', UInt8),
+        ('PUnk12', UInt8),
+        ('PUnk13', UInt8),
+        ('PUnk14', UInt8),
+        ('PUnk15', UInt8),
+    )
+class MapInfo(Parser):
+    structs = (
+        ('Magic', Byte, 4),
+        ('FileVersion', UInt32),
+        ('Width', UInt32),
+        ('Height', UInt32),
+        ('Unknown2', UInt32),
+        ('Unknown3', UInt32),
+        ('Theme', String),
+        ('Planet', String),
+        ('BoundaryLeft', UInt32),
+        ('BoundaryBottom', UInt32),
+        ('BoundaryRight', UInt32),
+        ('BoundaryTop', UInt32),
+        ('Unknown4', UInt32),
+        ('Unknown5', UInt32),
+        ('LoaderImagePath', String),
+        ('LoaderImageFormat', UInt32),
+        ('Unknown6', UInt32),
+        ('Unknown7', UInt32),
+        ('Unknown8', UInt32),
+        ('LoaderImageWidth', UInt32),
+        ('LoaderImageHeight', UInt32),
+        ('Unknown9', UInt32),
+        ('Unknown10', UInt32),
+        ('Players', List(Player, UInt8)),
+    )
+
+class MapParser(object):
+    def __init__(self, filename):
+        self.mpq = mpq.Archive(str(filename))
+        self._info = {}
+
     @property
-    def Preload(self):
-        values = {}
-        root = objectify.fromstring(str(self.mpq['Preload.xml']))
-        values['Actor'] = [a.get('id') for a in root.Actor]
-        values['Unit'] = [a.get('id') for a in root.Unit]
-        values['Terrain'] = root.Terrain.get('id')
-        value = AttrDict(**values)
-        setattr(self, 'Preload', value)
-        return value
+    def info(self):
+        fp = StringIO(str(self.mpq['MapInfo']))
+        p = MapInfo()
+        data = p.serialize(fp)
+        return data
